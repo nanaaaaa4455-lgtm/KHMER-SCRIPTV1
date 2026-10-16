@@ -1,8 +1,3 @@
-<meta charset="utf-8"><pre><code class="language-lua">-- --- Delta_BloxFruit_KH.lua ---
--- Delta Blox Fruit Script | UI ភាសាខ្មែរ
--- Compatible: Synapse X, KRNL, Fluxus, Delta Executor
--- Tested: Blox Fruits v23+
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
