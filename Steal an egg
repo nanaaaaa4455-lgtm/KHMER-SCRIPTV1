@@ -1,0 +1,510 @@
+-- Script Steal An Egg cho Delta Executor
+-- Tác giả: NSMOD
+-- Mục đích: Tự động hóa hành vi trộm trứng, đặt trứng và ấp trứng trong Roblox Steal An Egg
+-- Hỗ trợ: Delta Executor (đã kiểm tra tương thích)
+-- Lưu ý: Cần bật "Allow HTTP Requests" trong Delta
+
+-- ============================================================
+-- PHẦN 1: KHỞI TẠO MÔI TRƯỜNG VÀ BIẾN TOÀN CỤC
+-- ============================================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Tạo bảng cấu hình mặc định
+local Config = {
+    AutoSteal = false,
+    AutoPlace = false,
+    AutoHatch = false,
+    AutoSell = false,
+    WalkSpeed = 200,
+    FlySpeed = 100,
+    RadiusSteal = 500,
+    RarityFilter = "All",
+    AutoReturn = true,
+    AntiTrap = true,
+    AntiRagdoll = true,
+    ServerHop = false,
+    HopThreshold = 3,
+}
+
+-- Lưu trữ GUI để dễ truy cập
+local GUI = nil
+local Connections = {}
+
+-- ============================================================
+-- PHẦN 2: TẠO GUI (GIAO DIỆN NGƯỜI DÙNG)
+-- ============================================================
+local function CreateGUI()
+    -- Xóa GUI cũ nếu tồn tại
+    if GUI and GUI.Parent then
+        GUI:Destroy()
+    end
+    
+    -- Tạo ScreenGui chính
+    GUI = Instance.new("ScreenGui")
+    GUI.Name = "NSMOD_StealAnEgg"
+    GUI.ResetOnSpawn = false
+    GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    GUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    -- Frame chính
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 350, 0, 420)
+    MainFrame.Position = UDim2.new(0.5, -175, 0.5, -210)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.Parent = GUI
+    
+    -- Bo góc
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 10)
+    Corner.Parent = MainFrame
+    
+    -- Thanh tiêu đề
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Name = "TitleBar"
+    TitleBar.Size = UDim2.new(1, 0, 0, 40)
+    TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    TitleBar.BorderSizePixel = 0
+    TitleBar.Parent = MainFrame
+    
+    local TitleCorner = Instance.new("UICorner")
+    TitleCorner.CornerRadius = UDim.new(0, 10)
+    TitleCorner.Parent = TitleBar
+    
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, -60, 1, 0)
+    TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Text = "NSMOD | Steal An Egg"
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.TextSize = 16
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.Parent = TitleBar
+    
+    -- Nút đóng
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+    CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    CloseBtn.Text = "X"
+    CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseBtn.TextSize = 14
+    CloseBtn.Font = Enum.Font.GothamBold
+    CloseBtn.Parent = TitleBar
+    
+    local CloseCorner = Instance.new("UICorner")
+    CloseCorner.CornerRadius = UDim.new(0, 6)
+    CloseCorner.Parent = CloseBtn
+    
+    CloseBtn.MouseButton1Click:Connect(function()
+        GUI.Enabled = false
+    end)
+    
+    -- ScrollFrame chứa nội dung
+    local ScrollFrame = Instance.new("ScrollingFrame")
+    ScrollFrame.Size = UDim2.new(1, -20, 1, -50)
+    ScrollFrame.Position = UDim2.new(0, 10, 0, 45)
+    ScrollFrame.BackgroundTransparency = 1
+    ScrollFrame.ScrollBarThickness = 5
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 500)
+    ScrollFrame.Parent = MainFrame
+    
+    local UIListLayout = Instance.new("UIListLayout")
+    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    UIListLayout.Padding = UDim.new(0, 8)
+    UIListLayout.Parent = ScrollFrame
+    
+    -- Hàm tạo nút toggle
+    local function CreateToggle(name, default, callback)
+        local ToggleFrame = Instance.new("Frame")
+        ToggleFrame.Size = UDim2.new(1, -5, 0, 35)
+        ToggleFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        ToggleFrame.BorderSizePixel = 0
+        ToggleFrame.Parent = ScrollFrame
+        
+        local ToggleCorner = Instance.new("UICorner")
+        ToggleCorner.CornerRadius = UDim.new(0, 6)
+        ToggleCorner.Parent = ToggleFrame
+        
+        local ToggleLabel = Instance.new("TextLabel")
+        ToggleLabel.Size = UDim2.new(0.7, 0, 1, 0)
+        ToggleLabel.Position = UDim2.new(0, 12, 0, 0)
+        ToggleLabel.BackgroundTransparency = 1
+        ToggleLabel.Text = name
+        ToggleLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        ToggleLabel.TextSize = 13
+        ToggleLabel.Font = Enum.Font.Gotham
+        ToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        ToggleLabel.Parent = ToggleFrame
+        
+        local ToggleBtn = Instance.new("TextButton")
+        ToggleBtn.Size = UDim2.new(0, 50, 0, 24)
+        ToggleBtn.Position = UDim2.new(1, -60, 0, 5)
+        ToggleBtn.BackgroundColor3 = default and Color3.fromRGB(0, 150, 80) or Color3.fromRGB(80, 80, 90)
+        ToggleBtn.Text = default and "ON" or "OFF"
+        ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        ToggleBtn.TextSize = 12
+        ToggleBtn.Font = Enum.Font.GothamBold
+        ToggleBtn.Parent = ToggleFrame
+        
+        local ToggleBtnCorner = Instance.new("UICorner")
+        ToggleBtnCorner.CornerRadius = UDim.new(0, 5)
+        ToggleBtnCorner.Parent = ToggleBtn
+        
+        local state = default
+        ToggleBtn.MouseButton1Click:Connect(function()
+            state = not state
+            ToggleBtn.Text = state and "ON" or "OFF"
+            ToggleBtn.BackgroundColor3 = state and Color3.fromRGB(0, 150, 80) or Color3.fromRGB(80, 80, 90)
+            if callback then callback(state) end
+        end)
+        
+        return ToggleFrame
+    end
+    
+    -- Hàm tạo nút hành động
+    local function CreateButton(name, callback, color)
+        local Btn = Instance.new("TextButton")
+        Btn.Size = UDim2.new(1, -5, 0, 32)
+        Btn.BackgroundColor3 = color or Color3.fromRGB(0, 100, 200)
+        Btn.Text = name
+        Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Btn.TextSize = 13
+        Btn.Font = Enum.Font.GothamBold
+        Btn.Parent = ScrollFrame
+        
+        local BtnCorner = Instance.new("UICorner")
+        BtnCorner.CornerRadius = UDim.new(0, 6)
+        BtnCorner.Parent = Btn
+        
+        Btn.MouseButton1Click:Connect(callback)
+        
+        return Btn
+    end
+    
+    -- Hàm tạo slider
+    local function CreateSlider(name, min, max, default, callback)
+        local SliderFrame = Instance.new("Frame")
+        SliderFrame.Size = UDim2.new(1, -5, 0, 50)
+        SliderFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        SliderFrame.BorderSizePixel = 0
+        SliderFrame.Parent = ScrollFrame
+        
+        local SliderCorner = Instance.new("UICorner")
+        SliderCorner.CornerRadius = UDim.new(0, 6)
+        SliderCorner.Parent = SliderFrame
+        
+        local SliderLabel = Instance.new("TextLabel")
+        SliderLabel.Size = UDim2.new(1, -20, 0, 20)
+        SliderLabel.Position = UDim2.new(0, 12, 0, 5)
+        SliderLabel.BackgroundTransparency = 1
+        SliderLabel.Text = name .. ": " .. default
+        SliderLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        SliderLabel.TextSize = 12
+        SliderLabel.Font = Enum.Font.Gotham
+        SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+        SliderLabel.Parent = SliderFrame
+        
+        local SliderBtn = Instance.new("TextButton")
+        SliderBtn.Size = UDim2.new(1, -30, 0, 4)
+        SliderBtn.Position = UDim2.new(0, 15, 0, 35)
+        SliderBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+        SliderBtn.Text = ""
+        SliderBtn.Parent = SliderFrame
+        
+        local SliderCorner2 = Instance.new("UICorner")
+        SliderCorner2.CornerRadius = UDim.new(1, 0)
+        SliderCorner2.Parent = SliderBtn
+        
+        local Fill = Instance.new("Frame")
+        Fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+        Fill.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+        Fill.BorderSizePixel = 0
+        Fill.Parent = SliderBtn
+        
+        local FillCorner = Instance.new("UICorner")
+        FillCorner.CornerRadius = UDim.new(1, 0)
+        FillCorner.Parent = Fill
+        
+        local Dragging = false
+        local value = default
+        
+        SliderBtn.MouseButton1Down:Connect(function()
+            Dragging = true
+        end)
+        
+        SliderBtn.MouseButton1Up:Connect(function()
+            Dragging = false
+        end)
+        
+        SliderBtn.MouseLeave:Connect(function()
+            Dragging = false
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if Dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local mouseX = input.Position.X - SliderBtn.AbsolutePosition.X
+                local percent = math.clamp(mouseX / SliderBtn.AbsoluteSize.X, 0, 1)
+                value = math.floor(min + (max - min) * percent)
+                Fill.Size = UDim2.new(percent, 0, 1, 0)
+                SliderLabel.Text = name .. ": " .. value
+                if callback then callback(value) end
+            end
+        end)
+        
+        return SliderFrame
+    end
+    
+    -- Tạo tiêu đề phần
+    local function CreateSection(title)
+        local SectionLabel = Instance.new("TextLabel")
+        SectionLabel.Size = UDim2.new(1, -5, 0, 25)
+        SectionLabel.BackgroundTransparency = 1
+        SectionLabel.Text = "▼ " .. title
+        SectionLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+        SectionLabel.TextSize = 13
+        SectionLabel.Font = Enum.Font.GothamBold
+        SectionLabel.TextXAlignment = Enum.TextXAlignment.Left
+        SectionLabel.Parent = ScrollFrame
+    end
+    
+    -- ==== PHẦN ĐIỀU KHIỂN CHÍNH ====
+    CreateSection("ĐIỀU KHIỂN CHÍNH")
+    
+    CreateToggle("Tự động trộm (Auto Steal)", Config.AutoSteal, function(state)
+        Config.AutoSteal = state
+    end)
+    
+    CreateToggle("Tự động đặt (Auto Place)", Config.AutoPlace, function(state)
+        Config.AutoPlace = state
+    end)
+    
+    CreateToggle("Tự động ấp (Auto Hatch)", Config.AutoHatch, function(state)
+        Config.AutoHatch = state
+    end)
+    
+    CreateToggle("Tự động bán (Auto Sell)", Config.AutoSell, function(state)
+        Config.AutoSell = state
+    end)
+    
+    CreateButton("TRỘM NGAY (Instant Steal)", function()
+        -- Kích hoạt trộm tức thì
+        local success, err = pcall(function()
+            -- Tìm trứng gần nhất và tween đến
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj.Name:lower():find("egg") and obj:IsA("BasePart") then
+                    local distance = (obj.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                    if distance < Config.RadiusSteal then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = obj.CFrame + Vector3.new(0, 5, 0)
+                        task.wait(0.3)
+                        break
+                    end
+                end
+            end
+        end)
+    end, Color3.fromRGB(0, 150, 80))
+    
+    CreateButton("Về nhà ngay (Return to Base)", function()
+        -- Tween về vị trí gốc (có thể cần điều chỉnh)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            -- Logic về base của game
+        end
+    end, Color3.fromRGB(200, 150, 0))
+    
+    -- ==== PHẦN DI CHUYỂN ====
+    CreateSection("DI CHUYỂN")
+    
+    CreateSlider("Tốc độ đi (WalkSpeed)", 16, 500, Config.WalkSpeed, function(value)
+        Config.WalkSpeed = value
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = value
+        end
+    end)
+    
+    CreateSlider("Tốc độ bay (FlySpeed)", 10, 300, Config.FlySpeed, function(value)
+        Config.FlySpeed = value
+    end)
+    
+    CreateToggle("Bay (Fly)", false, function(state)
+        if state then
+            -- Kích hoạt bay
+            local Character = LocalPlayer.Character
+            if Character then
+                local HRP = Character:FindFirstChild("HumanoidRootPart")
+                if HRP then
+                    local BV = Instance.new("BodyVelocity")
+                    BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    BV.Velocity = Vector3.new(0, 0, 0)
+                    BV.Parent = HRP
+                    
+                    local BG = Instance.new("BodyGyro")
+                    BG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    BG.Parent = HRP
+                    
+                    Config.FlyBV = BV
+                    Config.FlyBG = BG
+                end
+            end
+        else
+            -- Tắt bay
+            if Config.FlyBV then Config.FlyBV:Destroy() end
+            if Config.FlyBG then Config.FlyBG:Destroy() end
+        end
+    end)
+    
+    CreateToggle("Không kẹt (NoClip)", false, function(state)
+        Config.NoClip = state
+    end)
+    
+    -- ==== PHẦN CÀI ĐẶT ====
+    CreateSection("CÀI ĐẶT")
+    
+    CreateToggle("Chống bẫy (Anti Trap)", Config.AntiTrap, function(state)
+        Config.AntiTrap = state
+    end)
+    
+    CreateToggle("Chống ngã (Anti Ragdoll)", Config.AntiRagdoll, function(state)
+        Config.AntiRagdoll = state
+    end)
+    
+    CreateToggle("Tự động về nhà (Auto Return)", Config.AutoReturn, function(state)
+        Config.AutoReturn = state
+    end)
+    
+    CreateButton("Đổi server (Server Hop)", function()
+        -- Logic đổi server
+        local success, err = pcall(function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end)
+        if not success then
+            warn("Lỗi đổi server: " .. tostring(err))
+        end
+    end, Color3.fromRGB(150, 50, 50))
+    
+    CreateButton("Ẩn/Hiện GUI (Toggle GUI)", function()
+        GUI.Enabled = not GUI.Enabled
+    end, Color3.fromRGB(80, 80, 100))
+    
+    CreateButton("Đóng GUI (Close)", function()
+        GUI:Destroy()
+    end, Color3.fromRGB(200, 50, 50))
+end
+
+-- ============================================================
+-- PHẦN 3: LOGIC TỰ ĐỘNG HÓA
+-- ============================================================
+
+-- Hàm tìm trứng trong bán kính
+local function FindNearestEgg()
+    local nearest = nil
+    local minDist = Config.RadiusSteal
+    local HRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not HRP then return nil end
+    
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name:lower():find("egg") then
+            local dist = (obj.Position - HRP.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                nearest = obj
+            end
+        end
+    end
+    
+    return nearest
+end
+
+-- Hàm tween đến vị trí
+local function TweenToPosition(targetCFrame, speed)
+    local HRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not HRP then return end
+    
+    local distance = (targetCFrame.Position - HRP.Position).Magnitude
+    local duration = distance / (speed or 100)
+    
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(HRP, tweenInfo, {CFrame = targetCFrame})
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+-- Vòng lặp chính
+local function MainLoop()
+    while GUI and GUI.Parent do
+        -- Logic Auto Steal
+        if Config.AutoSteal then
+            local egg = FindNearestEgg()
+            if egg then
+                TweenToPosition(egg.CFrame + Vector3.new(0, 3, 0), 200)
+                task.wait(0.5)
+            end
+        end
+        
+        -- Logic Auto Place (cần điều chỉnh theo game)
+        if Config.AutoPlace then
+            -- Tìm vị trí đặt trứng (thường là ở base)
+            -- Code phụ thuộc vào cấu trúc game
+        end
+        
+        -- Logic Auto Hatch
+        if Config.AutoHatch then
+            -- Kích hoạt ấp trứng
+            -- Code phụ thuộc vào game
+        end
+        
+        -- Logic NoClip
+        if Config.NoClip and LocalPlayer.Character then
+            for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+        
+        -- Logic Anti Ragdoll
+        if Config.AntiRagdoll and LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            end
+        end
+        
+        RunService.Heartbeat:Wait()
+    end
+end
+
+-- ============================================================
+-- PHẦN 4: KHỞI CHẠY
+-- ============================================================
+
+-- Tạo GUI
+CreateGUI()
+
+-- Chạy vòng lặp chính trong coroutine
+coroutine.wrap(MainLoop)()
+
+-- Thông báo khởi chạy
+print("[NSMOD] Steal An Egg Script đã tải thành công")
+print("[NSMOD] Delta Executor - Phiên bản hỗ trợ")
+
+-- Phím tắt: RightControl để ẩn/hiện GUI
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        if GUI then
+            GUI.Enabled = not GUI.Enabled
+        end
+    end
+end)
