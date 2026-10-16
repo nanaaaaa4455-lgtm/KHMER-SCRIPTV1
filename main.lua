@@ -924,6 +924,3 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     if CFG.AutoFarm.Enabled then StartAutoFarm() end
     if CFG.Speed.Enabled then ApplySpeed() end
 end)
-
-print("[Delta Blox Fruit KH] ✅ Script ត្រូវបានបញ្ចូលដោយជោគជ័យ | v2.4")
-</code></pre>
